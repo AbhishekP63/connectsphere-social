@@ -76,9 +76,12 @@ export function PostCard({ post }: PostCardProps) {
 
   async function toggleLike() {
     if (!profile) return;
+    // Optimistic update — instant UI change no refresh needed
     if (isLiked) {
+      setLikes((prev) => prev.filter((id) => id !== profile.id));
       await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', profile.id);
     } else {
+      setLikes((prev) => [...prev, profile.id]);
       await supabase.from('likes').insert({ post_id: post.id, user_id: profile.id });
       if (post.user_id !== profile.id) {
         await supabase.from('notifications').insert({ user_id: post.user_id, actor_id: profile.id, type: 'like', post_id: post.id });
