@@ -31,7 +31,7 @@ export function Feed() {
     if (!profile) return;
     try {
       const { data: friendships } = await supabase.from('friendships').select('requester_id, recipient_id').eq('status', 'accepted').or(`requester_id.eq.${profile.id},recipient_id.eq.${profile.id}`);
-      const friendIds = friendships?.map((f) => f.requester_id === profile.id ? f.recipient_id : f.requester_id) || [];
+      const friendIds = friendships?.map((f:any) => f.requester_id === profile.id ? f.recipient_id : f.requester_id) || [];
       const userIds = [profile.id, ...friendIds];
       const { data, error } = await supabase.from('posts').select('*').in('user_id', userIds).order('created_at', { ascending: false });
       if (error) throw error;

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { uploadProfilePicture, uploadCoverPhoto } from '../lib/storage';
+import { Camera, CreditCard as Edit2, Save, X } from 'lucide-react';
 import { PostCard } from '../components/posts/PostCard';
-import { UserPlus, UserCheck, X } from 'lucide-react';
-import type { Profile } from '../types/database';
 
 interface PostData {
   id: string;
@@ -13,98 +13,206 @@ interface PostData {
   created_at: string;
 }
 
-interface UserProfileProps {
-  userId: string;
-  onClose: () => void;
-}
-
-export function UserProfile({ userId, onClose }: UserProfileProps) {
-  const { profile: currentUser } = useAuth();
-  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+export function Profile() {
+  const { profile, updateProfile } = useAuth();
   const [posts, setPosts] = useState<PostData[]>([]);
-  const [friendStatus, setFriendStatus] = useState<'none' | 'pending' | 'accepted'>('none');
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    full_name: '',
+    bio: '',
+  });
 
   useEffect(() => {
-    loadProfile();
-    loadPosts();
-    checkFriendStatus();
-  }, [userId]);
+    if (profile) {
+      setFormData({
+        full_name: profile.full_name,
+        bio: profile.bio,
+      });
+      loadUserPosts();
+    }
+  }, [profile]);
 
-  async function loadProfile() {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-    if (data) setUserProfile(data);
-  }
+  async function loadUserPosts() {
+    if (!profile) return;
 
-  async function loadPosts() {
-    const { data } = await supabase.from('posts').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    const { data } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false });
+
     if (data) setPosts(data);
   }
 
-  async function checkFriendStatus() {
-    if (!currentUser) return;
-    const { data } = await supabase.from('friendships').select('status')
-      .or(`and(requester_id.eq.${currentUser.id},recipient_id.eq.${userId}),and(requester_id.eq.${userId},recipient_id.eq.${currentUser.id})`)
-      .maybeSingle();
-    if (data) setFriendStatus(data.status as any);
+  async function handleProfilePictureUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    setLoading(true);
+    try {
+      const url = await uploadProfilePicture(profile.id, file);
+      await updateProfile({ profile_picture: url });
+    } catch (error) {
+      console.error('Error uploading profile picture:', error);
+      alert('Failed to upload profile picture');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function sendFriendRequest() {
-    if (!currentUser) return;
-    await supabase.from('friendships').insert({ requester_id: currentUser.id, recipient_id: userId, status: 'pending' });
-    await supabase.from('notifications').insert({ user_id: userId, actor_id: currentUser.id, type: 'friend_request' });
-    setFriendStatus('pending');
+  async function handleCoverPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    setLoading(true);
+    try {
+      const url = await uploadCoverPhoto(profile.id, file);
+      await updateProfile({ cover_photo: url });
+    } catch (error) {
+      console.error('Error uploading cover photo:', error);
+      alert('Failed to upload cover photo');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (!userProfile) return null;
+  async function handleSaveProfile() {
+    setLoading(true);
+    try {
+      await updateProfile(formData);
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!profile) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg max-h-screen overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        {/* Cover */}
-        <div className="relative h-32 bg-gradient-to-r from-blue-400 to-purple-500 rounded-t-2xl">
-          {userProfile.cover_photo && <img src={userProfile.cover_photo} alt="Cover" className="w-full h-full object-cover rounded-t-2xl" />}
-          <button onClick={onClose} className="absolute top-3 right-3 p-1.5 bg-black/30 rounded-full hover:bg-black/50">
-            <X className="w-5 h-5 text-white" />
-          </button>
+    <div className="max-w-4xl mx-auto">
+      <div className="card overflow-hidden">
+        <div className="relative h-48 bg-gradient-to-r from-blue-400 to-purple-500">
+          {profile.cover_photo && (
+            <img
+              src={profile.cover_photo}
+              alt="Cover"
+              className="w-full h-full object-cover"
+            />
+          )}
+          <label className="absolute bottom-4 right-4 p-2 bg-white dark:bg-gray-800 rounded-full cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 shadow-lg">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleCoverPhotoUpload}
+              className="hidden"
+              disabled={loading}
+            />
+            <Camera className="w-5 h-5" />
+          </label>
         </div>
 
-        <div className="px-5 pb-5">
-          <div className="flex items-end justify-between -mt-12 mb-4">
-            {userProfile.profile_picture ? (
-              <img src={userProfile.profile_picture} alt={userProfile.full_name} className="w-20 h-20 rounded-full border-4 border-white dark:border-gray-800 object-cover" />
-            ) : (
-              <div className="w-20 h-20 rounded-full border-4 border-white dark:border-gray-800 bg-gray-300 dark:bg-gray-600" />
-            )}
+        <div className="px-6 pb-6">
+          <div className="flex items-end justify-between -mt-16 mb-4">
+            <div className="relative">
+              {profile.profile_picture ? (
+                <img
+                  src={profile.profile_picture}
+                  alt={profile.full_name}
+                  className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800 object-cover"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800 bg-gray-300 dark:bg-gray-600" />
+              )}
+              <label className="absolute bottom-0 right-0 p-2 bg-white dark:bg-gray-800 rounded-full cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 shadow-lg">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProfilePictureUpload}
+                  className="hidden"
+                  disabled={loading}
+                />
+                <Camera className="w-4 h-4" />
+              </label>
+            </div>
 
-            {currentUser?.id !== userId && (
+            <button
+              onClick={() => (isEditing ? setIsEditing(false) : setIsEditing(true))}
+              className="btn-secondary flex items-center space-x-2"
+            >
+              {isEditing ? (
+                <>
+                  <X className="w-4 h-4" />
+                  <span>Cancel</span>
+                </>
+              ) : (
+                <>
+                  <Edit2 className="w-4 h-4" />
+                  <span>Edit Profile</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {isEditing ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={formData.full_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, full_name: e.target.value })
+                  }
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Bio</label>
+                <textarea
+                  value={formData.bio}
+                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                  className="input-field resize-none"
+                  rows={3}
+                  placeholder="Tell us about yourself..."
+                />
+              </div>
+
               <button
-                onClick={friendStatus === 'none' ? sendFriendRequest : undefined}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium ${
-                  friendStatus === 'accepted' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                  friendStatus === 'pending' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
-                  'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
+                onClick={handleSaveProfile}
+                disabled={loading}
+                className="btn-primary flex items-center space-x-2"
               >
-                {friendStatus === 'accepted' ? <><UserCheck className="w-4 h-4" /><span>Friends</span></> :
-                 friendStatus === 'pending' ? <><UserPlus className="w-4 h-4" /><span>Pending</span></> :
-                 <><UserPlus className="w-4 h-4" /><span>Add Friend</span></>}
+                <Save className="w-4 h-4" />
+                <span>{loading ? 'Saving...' : 'Save Changes'}</span>
               </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div>
+              <h1 className="text-2xl font-bold">{profile.full_name}</h1>
+              <p className="text-gray-600 dark:text-gray-400">@{profile.username}</p>
+              {profile.bio && (
+                <p className="mt-3 text-gray-700 dark:text-gray-300">{profile.bio}</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
-          <h2 className="text-xl font-bold">{userProfile.full_name}</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">@{userProfile.username}</p>
-          {userProfile.bio && <p className="mt-2 text-gray-700 dark:text-gray-300 text-sm">{userProfile.bio}</p>}
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{posts.length} posts</p>
-
-          <div className="mt-4 space-y-3">
-            <h3 className="font-semibold">Posts</h3>
-            {posts.length === 0 ? (
-              <p className="text-gray-500 text-sm text-center py-4">No posts yet</p>
-            ) : (
-              posts.map((post) => <PostCard key={post.id} post={post} />)
-            )}
-          </div>
+      <div className="mt-6">
+        <h2 className="text-xl font-bold mb-4 px-4">Posts</h2>
+        <div className="space-y-4">
+          {posts.length === 0 ? (
+            <div className="card p-8 text-center">
+              <p className="text-gray-500 dark:text-gray-400">No posts yet</p>
+            </div>
+          ) : (
+            posts.map((post) => <PostCard key={post.id} post={post} />)
+          )}
         </div>
       </div>
     </div>

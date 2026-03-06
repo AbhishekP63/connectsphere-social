@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { Heart, MessageCircle, Share2, Send, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { Profile } from '../../types/database';
-import { Lightbox } from '../Lightbox';
+import { Lightbox } from '../LightBox';
 import { UserProfile } from '../../pages/UserProfile';
 
 interface PostData {
