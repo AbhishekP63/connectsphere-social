@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Heart, MessageCircle, Share2, Send } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Send, Trash2 } from 'lucide-react';
 import type { Profile } from '../../types/database';
 
 interface PostData {
@@ -107,6 +107,13 @@ export function PostCard({ post }: PostCardProps) {
     }
   }
 
+
+  async function deletePost() {
+    if (!profile || post.user_id !== profile.id) return;
+    if (!confirm('Delete this post?')) return;
+    await supabase.from('posts').delete().eq('id', post.id);
+  }
+
   function handleShare() {
     const shareText = post.content || 'Check out this post on ConnectSphere!';
     if (navigator.share) {
@@ -178,6 +185,13 @@ export function PostCard({ post }: PostCardProps) {
               <MessageCircle className="w-5 h-5" />
               <span className="text-sm">{comments.length}</span>
             </button>
+
+            {/* Delete Button - only for post owner */}
+            {profile?.id === post.user_id && (
+              <button onClick={deletePost} className="flex items-center space-x-2 text-gray-600 dark:text-gray-400 hover:text-red-500 transition-colors ml-auto">
+                <Trash2 className="w-5 h-5" />
+              </button>
+            )}
 
             {/* Share Button - Fixed */}
             <div className="relative">
